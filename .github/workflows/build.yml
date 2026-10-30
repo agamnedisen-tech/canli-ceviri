@@ -2,6 +2,8 @@ name: APK derle
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,10 +18,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+      - name: Imza anahtarini hazirla
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/release.jks"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/release.jks" >> "$GITHUB_ENV"
+            echo "Sabit imza kullanildi" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "UYARI: sabit imza yok, gecici imza kullanildi" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Derle
         working-directory: proje
-        run: gradle assembleDebug --no-daemon --stacktrace
-      - uses: actions/upload-artifact@v4
+        env:
+          KS_PASS: ${{ secrets.KS_PASS }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+      - name: APK adini duzenle
+        run: cp proje/app/build/outputs/apk/release/app-release.apk CanliCeviri.apk
+      - name: Surum olarak yayinla
+        uses: softprops/action-gh-release@v2
         with:
-          name: canli-ceviri-apk
-          path: proje/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v${{ github.run_number }}
+          name: Canlı Çeviri v${{ github.run_number }}
+          files: CanliCeviri.apk
